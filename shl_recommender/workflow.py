@@ -198,17 +198,16 @@ def recommendation_agent(
             end_of_conversation=False,
         )
 
-    # ── Generate explanation ───────────────────────────────────────
     try:
         reply = synthesize_recommendation(messages, assessments, state, is_refinement=is_refinement)
-    except Exception as e:
-        print(f"[LLM] synthesis failed: {e}")
+        if not reply:
+            raise Exception("LLM returned empty reply")
+    except Exception:
         role_str = state.role or "the role"
+        level_str = state.seniority_raw or state.seniority or "the specified level"
         reply = (
-            f"Here {'are' if len(assessments) > 1 else 'is'} "
-            f"{len(assessments)} assessment{'s' if len(assessments) > 1 else ''} "
-            f"for {role_str} ({state.seniority_raw or state.seniority or 'the level specified'}).\n\n"
-            + "\n".join(a.url for a in assessments)
+            f"Here are {len(assessments)} assessments matched for {role_str} "
+            f"at {level_str}. Review the shortlist below."
         )
 
     recs = [assessment_to_rec(a) for a in assessments]

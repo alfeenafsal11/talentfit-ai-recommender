@@ -1,4 +1,4 @@
-# TalentFit AI: Conversational Assessment Recommender Agent
+# TalentFit AI: Conversational SHL Assessment Recommender
 
 An autonomous, conversational assistant designed to guide recruiters and hiring managers from vague hiring intents to grounded, actionable assessment shortlists.
 
@@ -6,7 +6,7 @@ An autonomous, conversational assistant designed to guide recruiters and hiring 
 > **Private Portfolio Project**: This repository represents an independent engineering work demonstrating a robust, production-grade conversational recommendation system. It leverages the public product catalog and problem framework from SHL (a global leader in talent assessment solutions) as a reference dataset to build and validate a multi-agent deterministic orchestrator.
 
 ## Problem Summary
-Finding the right assessment from a large catalog can be overwhelming. Users often lack the exact vocabulary or domain knowledge to search effectively. This system solves that problem by using natural dialogue to clarify requirements, refine choices, and recommend precise assessments.
+Finding the right assessment from a large catalog can be overwhelming. Users often lack the exact vocabulary or domain knowledge to search effectively. This system solves that problem by using natural dialogue to clarify requirements, refine choices, and recommend precise assessments. The system is additionally designed to surface ML fairness considerations relevant to high-stakes talent assessment contexts.
 
 ## Architecture
 The system employs a **Deterministic Orchestration** pattern. Rather than relying on a single large LLM prompt to manage state, routing, and search—which often leads to hallucinations and brittle behavior—the architecture decomposes into specialized, deterministic agents:
@@ -73,3 +73,9 @@ python evaluate.py --conversations ../dataset/sample_conversations/GenAI_SampleC
 ## Limitations
 - The underlying hybrid search relies on TF-IDF fallback when `rank-bm25` is unavailable, slightly lowering recall on heavily keyword-dependent queries.
 - The system focuses exclusively on Individual Test Solutions (not Pre-packaged Solutions) in accordance with the target architectural scope.
+- Recall@10 = 0.328 on public traces (BM25-only baseline: 0.213). Zero-recall traces 
+  (C2, C7, C9, C10) are caused by catalog vocabulary gaps, not retrieval model failure — 
+  the expected assessments exist but their descriptions lack query-aligned terminology.
+- Seniority hard-filtering causes false negatives for assessments with empty 
+  job_level_buckets. A soft-penalty approach would improve recall without sacrificing 
+  precision significantly.

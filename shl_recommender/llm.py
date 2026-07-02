@@ -81,7 +81,7 @@ def call_llm(
             pass  # Suppressed for clean logs
 
     # Soft fallback
-    raise Exception("LLM unavailable — configure GROQ_API_KEY or OPENAI_API_KEY")
+    return ""  # Caller will use deterministic fallback reply
 
 
 # ─────────────────────────────────────────

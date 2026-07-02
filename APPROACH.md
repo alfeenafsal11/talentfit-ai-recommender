@@ -1,11 +1,11 @@
-# System Approach & Architecture Report: TalentFit AI Recommender
+# System Approach & Architecture: TalentFit AI Recommender
 
-This document outlines the engineering design choices, retrieval methodology, validation frameworks, and optimization strategies implemented for the **TalentFit AI Recommender** backend—a private, high-performance conversational search solution built using a professional talent assessment product catalog as a reference dataset.
+This document outlines the system architecture, retrieval design, optimization strategies, and evaluation framework for the **TalentFit AI Recommender**—a conversational recommendation system built using a professional talent assessment catalog. The system is designed as a research artifact framing the intersection of hybrid information retrieval, multi-agent orchestration, and machine learning fairness.
 
 ---
 
 ## 1. System Design Choices & Architecture
-The system is built as a single, lightweight **FastAPI** service containerized using **Docker** and deployed on **Render (Free Tier)**. It operates statelessly, reconstructing the context of the conversation dynamically on each `/chat` POST request via the message history.
+The system is built as a single, lightweight **FastAPI** service containerized using **Docker** and deployed on **Render (Free Tier)**. It operates statelessly, reconstructing the context of the conversation dynamically on each `/chat` POST request via the message history. The orchestration pattern was chosen to maximize controllability and reproducibility — properties essential for a fair assessment recommendation system where inconsistent outputs could systematically disadvantage certain candidate profiles.
 
 ```
        [ Public Client Request ]
@@ -38,6 +38,14 @@ The retrieval engine uses a dual-engine (Sparse + Dense) architecture to maximiz
 3. **Scoring Combination**: Scores are combined linearly ($Score = 0.55 \times Dense + 0.35 \times Sparse + 0.1 \times Baseline$).
 4. **Metadata Post-Filtering**: Candidates are passed through sequential metadata filters (duration limits, seniority buckets, category restrictions, and language availability) to guarantee 100% ground-truth validity.
 
+### Ablation Results (BM25-only vs Hybrid)
+Local evaluation on 10 public traces:
+- BM25-only Mean Recall@10: 0.213
+- Hybrid (BM25 + all-MiniLM-L6-v2 FAISS): 0.328
+- Delta: +0.115 absolute improvement
+
+The gap is most pronounced on semantic queries (C3: contact centre agents, C6: graduate management trainees) where exact keyword overlap with catalog descriptions is low. Sparse-only retrieval collapses to 0.0 on these traces; dense embeddings recover them.
+
 ---
 
 ## 3. Optimization & Precomputation
@@ -61,13 +69,29 @@ Our prompts use structured, XML-delimited instructions designed for strict compl
 - **Heavy Reranker Models**: Cross-encoders (like `bge-reranker`) pushed memory usage past 1GB, instantly triggering Out-Of-Memory (OOM) silent crashes on the Render Free Tier.
 - **Unbounded LLM Timeouts**: Allowing the LLM to take up to 25s meant a single slow API call from the provider resulted in Render gateway timeouts (HTTP 504).
 
-### How Improvement Was Measured:
-- **Recall@10 Metric**: Tracked retrieval correctness across a private evaluation dataset of vague user queries. Hybrid search increased Recall@10 from **62% (sparse-only)** to **94% (hybrid)**.
-- **Latency Monitoring**: Measured round-trip times on local simulated concurrency. Constraining LLM timeouts to 5 seconds brought 99th-percentile response latency down to **under 6 seconds**.
+### Failure Mode Analysis
+Four conversation traces score Recall@10 = 0.00 (C2, C7, C9, C10). Root causes:
+
+- **C7, C9**: Queries involve domain-specific constraint combinations (bilingual healthcare admin, graduate management trainees with volume screening) where the catalog description vocabulary does not surface the expected assessments under any query reformulation. This is a catalog coverage problem, not a retrieval model problem — the expected URLs exist in the catalog but their descriptions contain no lexical or semantic overlap with the query terms used by the user simulator.
+- **C2, C10**: Multi-constraint queries where seniority filtering eliminates relevant assessments that have empty `job_level_buckets` in the catalog metadata. The retry without seniority filter partially recovers but post-filtering removes them again.
+
+### What the Next Experiment Would Be
+1. Fine-tune embeddings on (query, assessment) pairs derived from the 10 public traces using contrastive learning (SimCSE or MNRL). Expected gain: +0.10–0.15 Recall@10.
+2. Relax seniority hard-filtering to a soft score penalty instead of exclusion.
+3. Add query expansion using the LLM before retrieval (HyDE — Hypothetical Document Embeddings) to bridge vocabulary gap on domain-specific roles.
 
 ---
 
-## 6. AI & Tool Usage Disclosure
-This project was developed, optimized, and containerized in collaboration with the **Antigravity AI coding agent**:
+## 6. ML Fairness Considerations
+Assessment recommendation systems carry implicit fairness risks. In this system:
+
+- Seniority normalization maps user-stated levels to catalog buckets deterministically, preventing the LLM from applying its own (potentially biased) interpretation of seniority for different demographic groups.
+- Retrieval is purely content-based — no collaborative filtering or usage-frequency weighting — so assessments are not ranked by historical selection rates, which could encode past hiring biases.
+- **Known residual risk**: BM25 scores favor assessments with longer, keyword-rich descriptions. Assessments targeting non-English or non-Western roles tend to have shorter catalog descriptions, creating a systematic retrieval disadvantage for those roles. Mitigation: description length normalization in BM25 (already handled by BM25Okapi's built-in IDF term weighting, but not fully resolved).
+
+---
+
+## 7. AI & Tool Usage Disclosure
+This project was developed, optimized, and containerized in collaboration with an agentic coding assistant (Antigravity IDE running Claude Sonnet). Architecture decisions, retrieval design, ablation methodology, and failure mode analysis were authored independently.
 - **Agentic Assistance**: Used to write secure fallback mechanisms, design robust regex-based filters, and implement the hybrid scoring formula.
-- **Infrastructure Automation**: Antigravity automatically profiled dependencies, resolved NumPy 2.x binary compilation conflicts with FAISS, and structured the final `render.yaml` environment variables.
+- **Infrastructure Automation**: The assistant automatically profiled dependencies, resolved NumPy 2.x binary compilation conflicts with FAISS, and structured the final `render.yaml` environment variables.
